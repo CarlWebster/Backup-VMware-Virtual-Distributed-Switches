@@ -1,0 +1,12 @@
+#webster@carlwebster.com
+#@carlwebster on Twitter
+#http://www.CarlWebster.com
+#Created on January 2, 2020
+
+#Portions borrowed from VMware vCenter inventory
+#Jacob Rutski
+#jake@serioustek.net
+#http://blogs.serioustek.net
+#@JRutski on Twitter
+
+# Version 1.0 released to the community on 8-Jan-2020 (Happy Birthday Sophie)
