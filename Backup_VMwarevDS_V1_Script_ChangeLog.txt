@@ -10,3 +10,10 @@
 #@JRutski on Twitter
 
 # Version 1.0 released to the community on 8-Jan-2020 (Happy Birthday Sophie)
+
+# Version 1.01 19-Apr-2023
+#	Fixed a $Null comparison where null was on the right instead of the left of the comparison
+#	Fixed a missing variable $tempPWD
+#	Test for variable $global:DefaultVIServer before using
+#	Tested with PowerCLI 13.1
+
