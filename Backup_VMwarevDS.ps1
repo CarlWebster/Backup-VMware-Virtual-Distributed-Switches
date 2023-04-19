@@ -104,9 +104,9 @@
 	This script creates one or more zip files.
 .NOTES
 	NAME: Backup_VMwarevDS.ps1
-	VERSION: 1.0
+	VERSION: 1.01
 	AUTHOR: Carl Webster with code borrowed from Jake Rutski
-	LASTEDIT: January 8, 2020
+	LASTEDIT: April 19, 2023
 #>
 
 #endregion
@@ -157,6 +157,12 @@ Param(
 #@JRutski on Twitter
 #
 # Version 1.0 released to the community on 8-Jan-2020 (Happy Birthday Sophie)
+#
+# Version 1.01 19-Apr-2023
+#	Fixed a $Null comparison where null was on the right instead of the left of the comparison
+#	Fixed a missing variable $tempPWD
+#	Test for variable $global:DefaultVIServer before using
+#	Tested with PowerCLI 13.1
 #endregion
 
 
@@ -246,120 +252,128 @@ $Folder = $pwdpath
 #region general script functions
 Function VISetup( [string] $VIServer )
 {
-    # Check for root
-    # http://blogs.technet.com/b/heyscriptingguy/archive/2011/05/11/check-for-admin-credentials-in-a-powershell-script.aspx
-    If(!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
-    {
-        Write-Host "`nThis script is not running as administrator - this is required to set global PowerCLI parameters. You may see PowerCLI warnings.`n"
-    }
+	# Check for root
+	# http://blogs.technet.com/b/heyscriptingguy/archive/2011/05/11/check-for-admin-credentials-in-a-powershell-script.aspx
+	If(!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator"))
+	{
+		Write-Host "`nThis script is not running as administrator - this is required to set global PowerCLI parameters. You may see PowerCLI warnings.`n"
+	}
 
-    Write-Verbose "$(Get-Date): Setting up VMware PowerCLI"
-    #Check to see if PowerCLI is installed via Module or MSI
-    $PSDefaultParameterValues = @{"*:Verbose"=$False}
+	Write-Verbose "$(Get-Date): Setting up VMware PowerCLI"
+	#Check to see if PowerCLI is installed via Module or MSI
+	$PSDefaultParameterValues = @{"*:Verbose"=$False}
 
-    If (((Get-Module -ListAvailable | Where-Object {$_.Name -eq "VMware.PowerCLI"}) -ne $null))
-    {
-        $PSDefaultParameterValues = @{"*:Verbose"=$True}
-        # PowerCLI is installed via PowerShell Gallery\or the module is installed
-        Write-Verbose "$(Get-Date): PowerCLI Module install found"
-    }
-    Else
-    {
-        $PSDefaultParameterValues = @{"*:Verbose"=$True}
-        If($PCLICustom)
-        {
-            Write-Verbose "$(Get-Date): Custom PowerCLI Install location"
-            $PCLIPath = "$(Select-FolderDialog)\Initialize-PowerCLIEnvironment.ps1" 4>$Null
-        }
-        ElseIf($env:PROCESSOR_ARCHITECTURE -like "*AMD64*")
-        {
-            $PCLIPath = "C:\Program Files (x86)\VMware\Infrastructure\vSphere PowerCLI\Scripts\Initialize-PowerCLIEnvironment.ps1"
-        }
-        Else
-        {
-            $PCLIPath = "C:\Program Files\VMware\Infrastructure\vSphere PowerCLI\Scripts\Initialize-PowerCLIEnvironment.ps1"
-        }
+	If ($Null -ne (Get-Module -ListAvailable | Where-Object {$_.Name -eq "VMware.PowerCLI"}))
+	{
+		$PSDefaultParameterValues = @{"*:Verbose"=$True}
+		# PowerCLI is installed via PowerShell Gallery\or the module is installed
+		Write-Verbose "$(Get-Date): PowerCLI Module install found"
+		# grab the PWD before PCLI resets it to C:\
+		$tempPWD = $pwd
+	}
+	Else
+	{
+		$PSDefaultParameterValues = @{"*:Verbose"=$True}
+		If($PCLICustom)
+		{
+			Write-Verbose "$(Get-Date): Custom PowerCLI Install location"
+			$PCLIPath = "$(Select-FolderDialog)\Initialize-PowerCLIEnvironment.ps1" 4>$Null
+		}
+		ElseIf($env:PROCESSOR_ARCHITECTURE -like "*AMD64*")
+		{
+			$PCLIPath = "C:\Program Files (x86)\VMware\Infrastructure\vSphere PowerCLI\Scripts\Initialize-PowerCLIEnvironment.ps1"
+		}
+		Else
+		{
+			$PCLIPath = "C:\Program Files\VMware\Infrastructure\vSphere PowerCLI\Scripts\Initialize-PowerCLIEnvironment.ps1"
+		}
 
-        If (!(Test-Path $PCLIPath))
-        {
-            # PCLI v6.5 changed install directory...check here first
-            If($env:PROCESSOR_ARCHITECTURE -like "*AMD64*")
-            {
-                $PCLIPath = "C:\Program Files (x86)\VMware\Infrastructure\PowerCLI\Scripts\Initialize-PowerCLIEnvironment.ps1"
-            }
-            Else
-            {
-                $PCLIPath = "C:\Program Files\VMware\Infrastructure\PowerCLI\Scripts\Initialize-PowerCLIEnvironment.ps1"
-            }
-        }
-        If (Test-Path $PCLIPath)
-        {
-            # grab the PWD before PCLI resets it to C:\
-            $tempPWD = $pwd
-            Import-Module $PCLIPath *>$Null
-        }
-        Else
-        {
-            Write-Host "`nPowerCLI does not appear to be installed - please install the latest version of PowerCLI. This script will now exit."
-            Write-Host "*** If PowerCLI was installed to a non-Default location, please use the -PCLICustom parameter ***`n"
-            Exit
-        }
-    }
+		If (!(Test-Path $PCLIPath))
+		{
+			# PCLI v6.5 changed install directory...check here first
+			If($env:PROCESSOR_ARCHITECTURE -like "*AMD64*")
+			{
+				$PCLIPath = "C:\Program Files (x86)\VMware\Infrastructure\PowerCLI\Scripts\Initialize-PowerCLIEnvironment.ps1"
+			}
+			Else
+			{
+				$PCLIPath = "C:\Program Files\VMware\Infrastructure\PowerCLI\Scripts\Initialize-PowerCLIEnvironment.ps1"
+			}
+		}
+		If (Test-Path $PCLIPath)
+		{
+			# grab the PWD before PCLI resets it to C:\
+			$tempPWD = $pwd
+			Import-Module $PCLIPath *>$Null
+		}
+		Else
+		{
+			Write-Host "`nPowerCLI does not appear to be installed - please install the latest version of PowerCLI. This script will now exit."
+			Write-Host "*** If PowerCLI was installed to a non-Default location, please use the -PCLICustom parameter ***`n"
+			Exit
+		}
+	}
 
-    $PSDefaultParameterValues = @{"*:Verbose"=$False}
-    $Script:xPowerCLIVer = (Get-Command Connect-VIServer).Version
-    $PSDefaultParameterValues = @{"*:Verbose"=$True}
+	$PSDefaultParameterValues = @{"*:Verbose"=$False}
+	$Script:xPowerCLIVer = (Get-Command Connect-VIServer).Version
+	$PSDefaultParameterValues = @{"*:Verbose"=$True}
 
-    Write-Verbose "$(Get-Date): Loaded PowerCLI version $($Script:xPowerCLIVer.Major).$($Script:xPowerCLIVer.Minor)"
-    If($Script:xPowerCLIVer.Major -lt 5 -or ($Script:xPowerCLIVer.Major -eq 5 -and $Script:xPowerCLIVer.Minor -lt 1))
-    {
-        Write-Host "`nPowerCLI version $($Script:xPowerCLIVer.Major).$($Script:xPowerCLIVer.Minor) is installed. PowerCLI version 5.1 or later is required to run this script. `nPlease install the latest version and run this script again. This script will now exit."
-        Exit
-    }
-    
-    #Set PCLI defaults and reset PWD
-    cd $tempPWD 4>$Null
-    Write-Verbose "$(Get-Date): Setting PowerCLI global Configuration"
-    Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -DisplayDeprecationWarnings $False -Confirm:$False *>$Null
+	Write-Verbose "$(Get-Date): Loaded PowerCLI version $($Script:xPowerCLIVer.Major).$($Script:xPowerCLIVer.Minor)"
+	If($Script:xPowerCLIVer.Major -lt 5 -or ($Script:xPowerCLIVer.Major -eq 5 -and $Script:xPowerCLIVer.Minor -lt 1))
+	{
+		Write-Host "`nPowerCLI version $($Script:xPowerCLIVer.Major).$($Script:xPowerCLIVer.Minor) is installed. PowerCLI version 5.1 or later is required to run this script. `nPlease install the latest version and run this script again. This script will now exit."
+		Exit
+	}
 
-    #Are we already connected to VC?
-    If($global:DefaultVIServer)
-    {
-        Write-Host "`nIt appears PowerCLI is already connected to a VCenter Server. Please use the 'Disconnect-VIServer' cmdlet to disconnect any sessions before running inventory."
-        Exit
-    }
+	#Set PCLI defaults and reset PWD
+	If(Test-Path variable:tempPWD)
+	{
+		cd $tempPWD 4>$Null
+	}
+	Write-Verbose "$(Get-Date): Setting PowerCLI global Configuration"
+	Set-PowerCLIConfiguration -InvalidCertificateAction Ignore -DisplayDeprecationWarnings $False -Confirm:$False *>$Null
 
-    #Connect to VI Server
-    Write-Verbose "$(Get-Date): Connecting to VIServer: $($VIServer)"
-    $Script:VCObj = Connect-VIServer $VIServer 4>$Null
+	#Are we already connected to VC?
+	If(Test-Path variable:global:DefaultVIServer)
+	{
+		If($global:DefaultVIServer)
+		{
+			Write-Host "`nIt appears PowerCLI is already connected to a vCenter Server. Please use the 'Disconnect-VIServer' cmdlet to disconnect any sessions before running inventory."
+			Exit
+		}
+	}
 
-    #Verify we successfully connected
-    If(!($?))
-    {
-        Write-Host "Connecting to vCenter failed with the following error: $($Error[0].Exception.Message.substring($Error[0].Exception.Message.IndexOf("Connect-VIServer") + 16).Trim()) This script will now exit."
-        Exit
-    }
+	#Connect to VI Server
+	Write-Verbose "$(Get-Date): Connecting to VIServer: $($VIServer)"
+	$Script:VCObj = Connect-VIServer $VIServer 4>$Null
+
+	#Verify we successfully connected
+	If(!($?))
+	{
+		Write-Host "Connecting to vCenter failed with the following error: $($Error[0].Exception.Message.substring($Error[0].Exception.Message.IndexOf("Connect-VIServer") + 16).Trim()) This script will now exit."
+		Exit
+	}
 }
 
 Function Select-FolderDialog
 {
-    # http://stackoverflow.com/questions/11412617/get-a-folder-path-from-the-explorer-menu-to-a-powershell-variable
-    param([string]$Description="Select PowerCLI Scripts Directory - Default is C:\Program Files (x86)\VMware\Infrastructure\vSphere PowerCLI\Scripts\",[string]$RootFolder="Desktop")
+	# http://stackoverflow.com/questions/11412617/get-a-folder-path-from-the-explorer-menu-to-a-powershell-variable
+	param([string]$Description="Select PowerCLI Scripts Directory - Default is C:\Program Files (x86)\VMware\Infrastructure\vSphere PowerCLI\Scripts\",[string]$RootFolder="Desktop")
 
-    [System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null     
+	[System.Reflection.Assembly]::LoadWithPartialName("System.windows.forms") | Out-Null     
 
-    $objForm = New-Object System.Windows.Forms.FolderBrowserDialog
-    $objForm.Rootfolder = $RootFolder
-    $objForm.Description = $Description
-    $Show = $objForm.ShowDialog()
-    If ($Show -eq "OK")
-    {
-        Return $objForm.SelectedPath
-    }
-    Else
-    {
-        Write-Error "Operation cancelled by user."
-    }
+	$objForm = New-Object System.Windows.Forms.FolderBrowserDialog
+	$objForm.Rootfolder = $RootFolder
+	$objForm.Description = $Description
+	$Show = $objForm.ShowDialog()
+	If ($Show -eq "OK")
+	{
+		Return $objForm.SelectedPath
+	}
+	Else
+	{
+		Write-Error "Operation cancelled by user."
+	}
 }
 
 Function ShowScriptOptions
